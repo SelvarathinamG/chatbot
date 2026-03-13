@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
-import { GoogleGenAI } from '@google/genai'
+import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import './App.css'
 
 const STARTER_PROMPTS = [
@@ -9,42 +10,135 @@ const STARTER_PROMPTS = [
   'Write a step-by-step plan to prepare for a software interview.',
 ]
 
+const KNOWLEDGE_SNIPPETS = {
+  frontend: `## Frontend Performance Trends (2026)
+
+- Prioritize **Core Web Vitals** as product KPIs.
+- Use **route-level code splitting** and defer non-critical JavaScript.
+- Adopt **image pipelines** (AVIF/WebP, responsive sizes, lazy loading).
+- Move expensive UI logic to **server-side rendering** or edge rendering where possible.
+
+### Practical Weekly Plan
+
+1. Measure with Lighthouse and Web Vitals in production.
+2. Fix largest render blockers first.
+3. Reduce hydration and bundle size.
+4. Re-measure and compare before/after metrics.
+`,
+  launch: `## SaaS Launch Checklist
+
+### Product
+
+- Validate one clear value proposition.
+- Ensure onboarding reaches first value in under 3 minutes.
+- Add analytics events for activation and retention.
+
+### Operations
+
+- Configure error tracking and uptime monitoring.
+- Prepare support macros and FAQ docs.
+- Create rollback and incident response playbook.
+
+### Go-To-Market
+
+- Publish one focused landing page.
+- Prepare launch posts and a short demo video.
+- Track CAC, conversion rate, and trial-to-paid.
+`,
+  interview: `## Software Interview Preparation Plan
+
+### Week 1: Fundamentals
+
+- Arrays, strings, hash maps, complexity analysis.
+- Solve 2 easy + 1 medium problem daily.
+
+### Week 2: Data Structures
+
+- Trees, graphs, stacks, queues, heaps.
+- Practice patterns: DFS/BFS, sliding window, two pointers.
+
+### Week 3: System Design + Behavioral
+
+- Review caching, load balancing, database tradeoffs.
+- Write STAR stories for leadership and collaboration.
+
+### Week 4: Mock Interviews
+
+- Run timed mocks with feedback loops.
+- Maintain an error log and review weak areas.
+`,
+  vector: `## Vector Databases in Real Products
+
+Vector databases store embeddings and enable **semantic search**.
+
+### Typical Architecture
+
+1. Convert documents to embeddings.
+2. Store embeddings in a vector index.
+3. At query time, embed the question.
+4. Retrieve nearest matches and build a grounded response.
+
+### Real-World Use Cases
+
+- Internal knowledge assistants.
+- Similarity search for products or media.
+- Personalized recommendations.
+`,
+}
+
+function buildStructuredReply(prompt) {
+  const lowerPrompt = prompt.toLowerCase()
+
+  if (lowerPrompt.includes('frontend') || lowerPrompt.includes('performance')) {
+    return KNOWLEDGE_SNIPPETS.frontend
+  }
+
+  if (lowerPrompt.includes('launch') || lowerPrompt.includes('saas')) {
+    return KNOWLEDGE_SNIPPETS.launch
+  }
+
+  if (lowerPrompt.includes('interview')) {
+    return KNOWLEDGE_SNIPPETS.interview
+  }
+
+  if (lowerPrompt.includes('vector') || lowerPrompt.includes('embedding')) {
+    return KNOWLEDGE_SNIPPETS.vector
+  }
+
+  return `## Professional Response
+
+I understood your request:
+
+> ${prompt}
+
+### Recommended Structure
+
+1. **Goal:** Define the exact outcome in one sentence.
+2. **Constraints:** Time, budget, tools, and quality bar.
+3. **Execution Plan:** Break work into phases and owners.
+4. **Validation:** Define success metrics and review checkpoints.
+
+### Next Actions
+
+- Start with a small pilot.
+- Document assumptions and decisions.
+- Review results and iterate quickly.
+`
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds)
+  })
+}
+
 function App() {
   const [prompt, setPrompt] = useState('')
   const [messages, setMessages] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY
-  const isConfigured = Boolean(apiKey)
-
-  const aiClient = useMemo(() => {
-    if (!isConfigured) {
-      return null
-    }
-
-    return new GoogleGenAI({ apiKey })
-  }, [apiKey, isConfigured])
-
-  function extractText(response) {
-    if (response?.text) {
-      return response.text
-    }
-
-    const parts = response?.candidates?.[0]?.content?.parts
-    if (!parts || !Array.isArray(parts)) {
-      return ''
-    }
-
-    return parts.map((part) => part?.text ?? '').join('')
-  }
-
   async function sendPrompt(rawPrompt) {
-    if (!isConfigured) {
-      setError('Please set VITE_GEMINI_API_KEY in your .env file.')
-      return
-    }
-
     const cleanPrompt = rawPrompt.trim()
     if (!cleanPrompt) {
       setError('Please enter a prompt first.')
@@ -56,20 +150,15 @@ function App() {
     setMessages((previous) => [...previous, { role: 'user', text: cleanPrompt }])
 
     try {
-      const response = await aiClient.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: cleanPrompt,
-      })
-
-      const text = extractText(response)
+      await delay(900)
+      const text = buildStructuredReply(cleanPrompt)
       setMessages((previous) => [
         ...previous,
-        { role: 'model', text: text || 'No text response returned by the model.' },
+        { role: 'model', text },
       ])
       setPrompt('')
-    } catch (requestError) {
-      const message = requestError instanceof Error ? requestError.message : 'Unknown error'
-      setError(`Gemini request failed: ${message}`)
+    } catch {
+      setError('Unable to generate a response right now. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -99,14 +188,8 @@ function App() {
             <span className="brand-dot" aria-hidden="true"></span>
             <span>Spark Ask</span>
           </div>
-          <div className="model-pill">gemini-2.5-flash</div>
+          <div className="model-pill">offline professional assistant</div>
         </header>
-
-        {!isConfigured && (
-          <div className="alert alert-warning mb-3" role="alert">
-            API key missing. Add <strong>VITE_GEMINI_API_KEY</strong> to <strong>.env</strong>, then restart <strong>npm run dev</strong>.
-          </div>
-        )}
 
         <section className="feed">
           {messages.length === 0 && (
@@ -120,7 +203,7 @@ function App() {
                     type="button"
                     className="chip-btn"
                     onClick={() => sendPrompt(starterPrompt)}
-                    disabled={isLoading || !isConfigured}
+                    disabled={isLoading}
                   >
                     {starterPrompt}
                   </button>
@@ -137,13 +220,19 @@ function App() {
                 style={{ animationDelay: `${Math.min(index * 45, 360)}ms` }}
               >
                 <p className="message-meta mb-2">{message.role === 'user' ? 'You asked' : 'Gemini answered'}</p>
-                <pre className="response-text mb-0">{message.text}</pre>
+                {message.role === 'model' ? (
+                  <div className="markdown-body">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <pre className="response-text mb-0">{message.text}</pre>
+                )}
               </article>
             ))}
 
             {isLoading && (
               <article className="message-card message-model loading-card">
-                <p className="message-meta mb-2">Gemini is thinking</p>
+                <p className="message-meta mb-2">Assistant is preparing a professional response</p>
                 <div className="typing-dots" aria-hidden="true">
                   <span></span>
                   <span></span>
@@ -160,7 +249,7 @@ function App() {
               id="prompt"
               className="composer-input"
               rows="2"
-              placeholder="Ask follow-up questions, request code, or explore ideas..."
+              placeholder="Ask for a proposal, checklist, summary, plan, or strategy..."
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               onKeyDown={handlePromptKeyDown}
