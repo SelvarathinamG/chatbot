@@ -1,0 +1,17 @@
+:root {
+  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  color: #11242f;
+}
+
+body {
+  margin: 0;
+  background: linear-gradient(140deg, #edf6ff 0%, #e8faf5 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+#root {
+  min-height: 100vh;
+}
